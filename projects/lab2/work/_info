@@ -1,0 +1,86 @@
+m255
+K4
+z2
+!s11f vlog 2020.1 2020.02, Feb 28 2020
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+dC:/intelFPGA_lite/20.1
+vcnt_en_testbanch
+Z0 DXx6 sv_std 3 std 0 22 VYECXdT12H8WgbUP_5Y6:3
+Z1 !s110 1727948590
+!i10b 1
+!s100 Tc2P8h5P`V7oPliiBVdTo1
+Z2 !s11b Dg1SIo80bB@j0V0VzS_@n1
+Ike4f3GXdV``BoCjj=:?iF1
+Z3 VDg1SIo80bB@j0V0VzS_@n1
+S1
+Z4 dC:/intelFPGA_lite/projects/lab2
+w1727789302
+8C:/intelFPGA_lite/projects/lab2/cnt_en_testbanch.sv
+FC:/intelFPGA_lite/projects/lab2/cnt_en_testbanch.sv
+!i122 3
+L0 3 47
+Z5 OV;L;2020.1;71
+r1
+!s85 0
+31
+Z6 !s108 1727948590.000000
+!s107 C:/intelFPGA_lite/projects/lab2/cnt_en_testbanch.sv|
+!s90 -reportprogress|300|-work|work|C:/intelFPGA_lite/projects/lab2/cnt_en_testbanch.sv|
+!i113 1
+Z7 o-work work
+Z8 tCvgOpt 0
+vcounter_enbl
+R0
+R1
+!i10b 1
+!s100 fAC?4`Xb2>4l:^CfSW8g80
+R2
+Ia<gAWl4`@XU3oC3Ul^<=K3
+R3
+S1
+R4
+w1727948217
+8C:/intelFPGA_lite/projects/lab2/counter_enbl.sv
+FC:/intelFPGA_lite/projects/lab2/counter_enbl.sv
+!i122 4
+Z9 L0 1 16
+R5
+r1
+!s85 0
+31
+R6
+!s107 C:/intelFPGA_lite/projects/lab2/counter_enbl.sv|
+!s90 -reportprogress|300|-work|work|C:/intelFPGA_lite/projects/lab2/counter_enbl.sv|
+!i113 1
+R7
+R8
+vtrigger_x
+R0
+!s110 1727789450
+!i10b 1
+!s100 6R:W7NKc9h[`Z_Pe=[]QO3
+R2
+IPFS[@Cg:mBB_ZjB1HN<k23
+R3
+S1
+R4
+w1727789258
+8C:/intelFPGA_lite/projects/lab2/trigger_x.sv
+FC:/intelFPGA_lite/projects/lab2/trigger_x.sv
+!i122 2
+R9
+R5
+r1
+!s85 0
+31
+!s108 1727789450.000000
+!s107 C:/intelFPGA_lite/projects/lab2/trigger_x.sv|
+!s90 -reportprogress|300|-work|work|-sv|-stats=none|C:/intelFPGA_lite/projects/lab2/trigger_x.sv|
+!i113 1
+o-work work -sv
+R8

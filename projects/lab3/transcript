@@ -1,0 +1,30 @@
+# Compile of cnt_en_testbanch.sv failed with 2 errors.
+# Compile of shift_reg_par_in_serial_out.sv was successful.
+# Compile of shift_reg_serial_in_par_out.sv was successful.
+# Compile of trigger_x.sv was successful.
+# Compile of trigger_d.sv was successful.
+# 5 compiles, 1 failed with 2 errors.
+# Compile of cnt_en_testbanch.sv was successful.
+# Compile of shift_reg_par_in_serial_out.sv was successful.
+# Compile of shift_reg_serial_in_par_out.sv was successful.
+# Compile of trigger_x.sv was successful.
+# Compile of trigger_d.sv was successful.
+# 5 compiles, 0 failed with no errors.
+vsim -gui work.testbench
+# vsim -gui work.testbench 
+# Start time: 15:16:53 on Oct 03,2024
+# Loading sv_std.std
+# Loading work.testbench
+# Loading work.trigger_x
+# Loading work.trigger_d
+# Loading work.shift_reg_par_in_serial_out
+# Loading work.shift_reg_serial_in_par_out
+add wave sim:/testbench/*
+run
+run
+# Break key hit
+# Load canceled
+quit -sim
+# End time: 15:24:35 on Oct 03,2024, Elapsed time: 0:07:42
+# Errors: 0, Warnings: 3
+cd C:/intelFPGA_lite/projects/lab2

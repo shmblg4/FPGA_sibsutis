@@ -1,0 +1,11 @@
+|and_or_not_sv
+key[0] => led.IN0
+key[0] => led.IN0
+key[0] => led[0].DATAIN
+key[1] => led.IN1
+key[1] => led.IN1
+led[0] << key[0].DB_MAX_OUTPUT_PORT_TYPE
+led[1] << led.DB_MAX_OUTPUT_PORT_TYPE
+led[2] << led.DB_MAX_OUTPUT_PORT_TYPE
+
+
