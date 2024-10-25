@@ -1,0 +1,53 @@
+{
+	"partitions" : [
+		{
+			"name" : "Top",
+			"pins" : [
+				{
+					"name" : "bit_out",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[0]",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[1]",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[2]",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[3]",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[4]",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[5]",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[6]",
+					"strict" : false
+				},
+				{
+					"name" : "led_bus[7]",
+					"strict" : false
+				},
+				{
+					"name" : "reset",
+					"strict" : false
+				},
+				{
+					"name" : "bit_in",
+					"strict" : false
+				}
+			]
+		}
+	]
+}

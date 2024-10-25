@@ -1,0 +1,10 @@
+# Compile of shift_reg_serial_in_par_out.sv was successful.
+# Compile of testbench_UART.sv was successful.
+# Compile of UART_reciever.sv failed with 3 errors.
+# Compile of trigger_x.sv was successful.
+# 4 compiles, 1 failed with 3 errors.
+# Compile of shift_reg_serial_in_par_out.sv was successful.
+# Compile of testbench_UART.sv was successful.
+# Compile of UART_reciever.sv was successful with warnings.
+# Compile of trigger_x.sv was successful.
+# 4 compiles, 0 failed with no errors.
