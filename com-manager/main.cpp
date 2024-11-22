@@ -10,13 +10,12 @@
 #include <queue>
 
 #define SAMPLE_RATE 24000
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE 8192
 #define NUM_BUFFERS 2
-#define DELAY_SECONDS 5
+#define DELAY_SECONDS 2
 
 std::atomic<bool> stopFlag(false);
 
-// Кольцевой буфер для передачи данных
 class CircularBuffer
 {
 private:
@@ -42,7 +41,7 @@ public:
         if (count < capacity)
             ++count;
         else
-            readIndex = (readIndex + 1) % capacity; // Перезапись старых данных
+            readIndex = (readIndex + 1) % capacity; // ?ерезапись старых данных
         cv.notify_one();
     }
 
@@ -61,53 +60,181 @@ public:
     }
 };
 
-void recordAudio(CircularBuffer &circBuffer)
+void findComPorts()
+{
+    char portName[10];
+    for (int i = 1; i <= 256; ++i)
+    {
+        snprintf(portName, sizeof(portName), "COM%d", i);
+
+        HANDLE hCom = CreateFileA(portName, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+
+        if (hCom != INVALID_HANDLE_VALUE)
+        {
+            std::cout << portName << " ????????." << std::endl;
+            CloseHandle(hCom);
+        }
+    }
+}
+
+HANDLE openCOMPort(const std::string &portName)
+{
+    HANDLE hCom = CreateFileA(
+        portName.c_str(),
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        NULL,
+        OPEN_EXISTING,
+        0,
+        NULL);
+
+    if (hCom == INVALID_HANDLE_VALUE)
+    {
+        std::cerr << "?????? ???????? COM-?????: " << GetLastError() << std::endl;
+        return NULL;
+    }
+
+    DCB dcb = {0};
+    dcb.DCBlength = sizeof(dcb);
+    if (!GetCommState(hCom, &dcb))
+    {
+        std::cerr << "?????? ????????? ????????? COM-?????" << std::endl;
+        CloseHandle(hCom);
+        return NULL;
+    }
+
+    dcb.BaudRate = CBR_115200;
+    dcb.ByteSize = 8;
+    dcb.StopBits = ONESTOPBIT;
+    dcb.Parity = NOPARITY;
+
+    if (!SetCommState(hCom, &dcb))
+    {
+        std::cerr << "?????? ????????? ????????? COM-?????" << std::endl;
+        CloseHandle(hCom);
+        return NULL;
+    }
+
+    COMMTIMEOUTS timeouts = {0};
+    timeouts.ReadIntervalTimeout = 50;
+    timeouts.ReadTotalTimeoutMultiplier = 10;
+    timeouts.ReadTotalTimeoutConstant = 50;
+    timeouts.WriteTotalTimeoutMultiplier = 10;
+    timeouts.WriteTotalTimeoutConstant = 50;
+
+    if (!SetCommTimeouts(hCom, &timeouts))
+    {
+        std::cerr << "?????? ????????? ????????? COM-?????" << std::endl;
+        CloseHandle(hCom);
+        return NULL;
+    }
+
+    return hCom;
+}
+
+void playbackAudio(CircularBuffer &buffer)
+{
+    HWAVEOUT hWaveOut;
+    WAVEFORMATEX waveFormat;
+    waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+    waveFormat.nChannels = 1; // ????
+    waveFormat.nSamplesPerSec = SAMPLE_RATE;
+    waveFormat.wBitsPerSample = 16;
+    waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
+    waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
+    waveFormat.cbSize = 0;
+
+    if (waveOutOpen(&hWaveOut, WAVE_MAPPER, &waveFormat, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
+    {
+        std::cerr << "?????? ???????? ?????????? ???????????????." << std::endl;
+        return;
+    }
+
+    WAVEHDR waveHeader;
+    std::vector<short> audioData(BUFFER_SIZE);
+
+    while (!stopFlag)
+    {
+        if (buffer.pop(audioData))
+        {
+            waveHeader.lpData = reinterpret_cast<LPSTR>(audioData.data());
+            waveHeader.dwBufferLength = audioData.size() * sizeof(short);
+            waveHeader.dwFlags = 0;
+
+            if (waveOutPrepareHeader(hWaveOut, &waveHeader, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
+            {
+                std::cerr << "?????? ?????????? ????????? ???????????????." << std::endl;
+                waveOutClose(hWaveOut);
+                return;
+            }
+
+            waveOutWrite(hWaveOut, &waveHeader, sizeof(WAVEHDR));
+        }
+    }
+
+    waveOutClose(hWaveOut);
+}
+
+void receiveFromCOMPort(HANDLE hCom, CircularBuffer &circBuffer)
+{
+    std::vector<short> buffer(BUFFER_SIZE);
+
+    while (!stopFlag)
+    {
+        DWORD bytesRead = 0;
+        if (ReadFile(hCom, buffer.data(), buffer.size() * sizeof(short), &bytesRead, NULL))
+        {
+            if (bytesRead > 0)
+            {
+                buffer.resize(bytesRead / sizeof(short));
+                circBuffer.push(buffer);
+            }
+        }
+        else
+        {
+            std::cerr << "?????? ?????? ?? COM-?????: " << GetLastError() << std::endl;
+        }
+    }
+}
+
+void recordAudio(CircularBuffer &buffer)
 {
     HWAVEIN hWaveIn;
     WAVEFORMATEX waveFormat;
     waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = 1;
+    waveFormat.nChannels = 1; // ????
     waveFormat.nSamplesPerSec = SAMPLE_RATE;
-    waveFormat.nAvgBytesPerSec = SAMPLE_RATE * sizeof(short);
-    waveFormat.nBlockAlign = sizeof(short);
     waveFormat.wBitsPerSample = 16;
+    waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
+    waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
     waveFormat.cbSize = 0;
 
     if (waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
     {
-        std::cerr << "Error opening recording device" << std::endl;
+        std::cerr << "?????? ???????? ?????????? ??????." << std::endl;
         return;
     }
 
-    WAVEHDR waveHdr[NUM_BUFFERS];
-    std::vector<short> buffers[NUM_BUFFERS];
+    WAVEHDR waveHeader;
+    std::vector<short> audioData(BUFFER_SIZE);
+    waveHeader.lpData = reinterpret_cast<LPSTR>(audioData.data());
+    waveHeader.dwBufferLength = BUFFER_SIZE * sizeof(short);
+    waveHeader.dwFlags = 0;
 
-    for (int i = 0; i < NUM_BUFFERS; ++i)
+    if (waveInPrepareHeader(hWaveIn, &waveHeader, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
     {
-        buffers[i].resize(BUFFER_SIZE);
-        waveHdr[i].lpData = reinterpret_cast<LPSTR>(buffers[i].data());
-        waveHdr[i].dwBufferLength = BUFFER_SIZE * sizeof(short);
-        waveHdr[i].dwFlags = 0;
-        waveHdr[i].dwLoops = 1;
-
-        waveInPrepareHeader(hWaveIn, &waveHdr[i], sizeof(WAVEHDR));
-        waveInAddBuffer(hWaveIn, &waveHdr[i], sizeof(WAVEHDR));
+        std::cerr << "?????? ?????????? ????????? ??????." << std::endl;
+        waveInClose(hWaveIn);
+        return;
     }
 
     waveInStart(hWaveIn);
 
     while (!stopFlag)
     {
-        for (int i = 0; i < NUM_BUFFERS; ++i)
+        if (waveInAddBuffer(hWaveIn, &waveHeader, sizeof(WAVEHDR)) == MMSYSERR_NOERROR)
         {
-            if (waveHdr[i].dwFlags & WHDR_DONE)
-            {
-                circBuffer.push(buffers[i]); // Добавляем данные в кольцевой буфер
-
-                waveInUnprepareHeader(hWaveIn, &waveHdr[i], sizeof(WAVEHDR));
-                waveInPrepareHeader(hWaveIn, &waveHdr[i], sizeof(WAVEHDR));
-                waveInAddBuffer(hWaveIn, &waveHdr[i], sizeof(WAVEHDR));
-            }
+            buffer.push(audioData);
         }
     }
 
@@ -115,69 +242,61 @@ void recordAudio(CircularBuffer &circBuffer)
     waveInClose(hWaveIn);
 }
 
-void playbackAudio(CircularBuffer &circBuffer)
+void sendToCOMPort(HANDLE hCom, CircularBuffer &circBuffer)
 {
-    HWAVEOUT hWaveOut;
-    WAVEFORMATEX waveFormat;
-    waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = 1;
-    waveFormat.nSamplesPerSec = SAMPLE_RATE;
-    waveFormat.nAvgBytesPerSec = SAMPLE_RATE * sizeof(short);
-    waveFormat.nBlockAlign = sizeof(short);
-    waveFormat.wBitsPerSample = 16;
-    waveFormat.cbSize = 0;
-
-    if (waveOutOpen(&hWaveOut, WAVE_MAPPER, &waveFormat, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
-    {
-        std::cerr << "Error opening playback device" << std::endl;
-        return;
-    }
-
-    WAVEHDR waveHdr;
     std::vector<short> buffer;
-
-    // Ждем 5 секунд перед началом воспроизведения
-    std::this_thread::sleep_for(std::chrono::seconds(DELAY_SECONDS));
 
     while (!stopFlag)
     {
-        if (circBuffer.pop(buffer)) // Извлекаем данные из кольцевого буфера
+        if (circBuffer.pop(buffer))
         {
-            waveHdr.lpData = reinterpret_cast<LPSTR>(buffer.data());
-            waveHdr.dwBufferLength = BUFFER_SIZE * sizeof(short);
-            waveHdr.dwFlags = 0;
-            waveHdr.dwLoops = 0;
-
-            waveOutPrepareHeader(hWaveOut, &waveHdr, sizeof(WAVEHDR));
-            waveOutWrite(hWaveOut, &waveHdr, sizeof(WAVEHDR));
-
-            while (!(waveHdr.dwFlags & WHDR_DONE) && !stopFlag)
+            DWORD bytesWritten = 0;
+            if (!WriteFile(hCom, buffer.data(), buffer.size() * sizeof(short), &bytesWritten, NULL))
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                std::cerr << "?????? ?????? ? COM-????: " << GetLastError() << std::endl;
             }
-
-            waveOutUnprepareHeader(hWaveOut, &waveHdr, sizeof(WAVEHDR));
         }
     }
-
-    waveOutClose(hWaveOut);
 }
 
 int main()
 {
-    CircularBuffer circBuffer(DELAY_SECONDS * SAMPLE_RATE / BUFFER_SIZE);
+    findComPorts();
+    std::string Port;
+    std::cout << "??????? ??? COM ????? (????????, COM1): ";
+    std::cin >> Port;
 
-    std::thread recordThread(recordAudio, std::ref(circBuffer));
-    std::thread playbackThread(playbackAudio, std::ref(circBuffer));
+    HANDLE hComWrite = openCOMPort(Port);
+    if (!hComWrite)
+        return 1;
 
-    std::cout << "Нажмите Enter для завершения..." << std::endl;
+    HANDLE hComRead = openCOMPort(Port);
+    if (!hComRead)
+    {
+        CloseHandle(hComWrite);
+        return 1;
+    }
+
+    CircularBuffer recordBuffer(DELAY_SECONDS * SAMPLE_RATE / BUFFER_SIZE);
+    CircularBuffer playbackBuffer(DELAY_SECONDS * SAMPLE_RATE / BUFFER_SIZE);
+
+    std::thread recordThread(recordAudio, std::ref(recordBuffer));
+    std::thread sendThread(sendToCOMPort, hComWrite, std::ref(recordBuffer));
+    std::thread receiveThread(receiveFromCOMPort, hComRead, std::ref(playbackBuffer));
+    std::thread playbackThread(playbackAudio, std::ref(playbackBuffer));
+
+    std::cin.get();
     std::cin.get();
 
     stopFlag = true;
 
     recordThread.join();
+    sendThread.join();
+    receiveThread.join();
     playbackThread.join();
 
-    std::cout << "Программа завершена." << std::endl;
+    CloseHandle(hComWrite);
+    CloseHandle(hComRead);
+
     return 0;
 }
