@@ -41,7 +41,7 @@ public:
         if (count < capacity)
             ++count;
         else
-            readIndex = (readIndex + 1) % capacity; // ?�१����� ����� ������
+            readIndex = (readIndex + 1) % capacity; // перепись старых данных
         cv.notify_one();
     }
 
@@ -63,7 +63,7 @@ public:
 void findComPorts()
 {
     char portName[10];
-    for (int i = 1; i <= 256; ++i)
+    for (int i = 256; i >= 1; --i)
     {
         snprintf(portName, sizeof(portName), "COM%d", i);
 
@@ -71,7 +71,7 @@ void findComPorts()
 
         if (hCom != INVALID_HANDLE_VALUE)
         {
-            std::cout << portName << " ????????." << std::endl;
+            std::cout << portName << " доступен." << std::endl;
             CloseHandle(hCom);
         }
     }
@@ -83,14 +83,14 @@ HANDLE openCOMPort(const std::string &portName)
         portName.c_str(),
         GENERIC_READ | GENERIC_WRITE,
         0,
-        NULL,
+        nullptr,
         OPEN_EXISTING,
         0,
-        NULL);
+        nullptr);
 
     if (hCom == INVALID_HANDLE_VALUE)
     {
-        std::cerr << "?????? ???????? COM-?????: " << GetLastError() << std::endl;
+        std::cerr << "Не удалось открыть COM-порт: " << GetLastError() << std::endl;
         return NULL;
     }
 
@@ -98,19 +98,19 @@ HANDLE openCOMPort(const std::string &portName)
     dcb.DCBlength = sizeof(dcb);
     if (!GetCommState(hCom, &dcb))
     {
-        std::cerr << "?????? ????????? ????????? COM-?????" << std::endl;
+        std::cerr << "Не удалось получить параметры COM-порта" << std::endl;
         CloseHandle(hCom);
         return NULL;
     }
 
-    dcb.BaudRate = CBR_115200;
+    dcb.BaudRate = 921600;
     dcb.ByteSize = 8;
     dcb.StopBits = ONESTOPBIT;
     dcb.Parity = NOPARITY;
 
     if (!SetCommState(hCom, &dcb))
     {
-        std::cerr << "?????? ????????? ????????? COM-?????" << std::endl;
+        std::cerr << "Не удалось установить параметры COM-порта" << std::endl;
         CloseHandle(hCom);
         return NULL;
     }
@@ -124,7 +124,7 @@ HANDLE openCOMPort(const std::string &portName)
 
     if (!SetCommTimeouts(hCom, &timeouts))
     {
-        std::cerr << "?????? ????????? ????????? COM-?????" << std::endl;
+        std::cerr << "Не удалось установить таймауты для COM-порта" << std::endl;
         CloseHandle(hCom);
         return NULL;
     }
@@ -137,7 +137,7 @@ void playbackAudio(CircularBuffer &buffer)
     HWAVEOUT hWaveOut;
     WAVEFORMATEX waveFormat;
     waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = 1; // ????
+    waveFormat.nChannels = 1; // моно
     waveFormat.nSamplesPerSec = SAMPLE_RATE;
     waveFormat.wBitsPerSample = 16;
     waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
@@ -146,7 +146,7 @@ void playbackAudio(CircularBuffer &buffer)
 
     if (waveOutOpen(&hWaveOut, WAVE_MAPPER, &waveFormat, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
     {
-        std::cerr << "?????? ???????? ?????????? ???????????????." << std::endl;
+        std::cerr << "Не удалось открыть вывод звука." << std::endl;
         return;
     }
 
@@ -163,7 +163,7 @@ void playbackAudio(CircularBuffer &buffer)
 
             if (waveOutPrepareHeader(hWaveOut, &waveHeader, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
             {
-                std::cerr << "?????? ?????????? ????????? ???????????????." << std::endl;
+                std::cerr << "Не удалось подготовить заголовок для вывода." << std::endl;
                 waveOutClose(hWaveOut);
                 return;
             }
@@ -192,7 +192,7 @@ void receiveFromCOMPort(HANDLE hCom, CircularBuffer &circBuffer)
         }
         else
         {
-            std::cerr << "?????? ?????? ?? COM-?????: " << GetLastError() << std::endl;
+            std::cerr << "Ошибка чтения из COM-порта: " << GetLastError() << std::endl;
         }
     }
 }
@@ -202,7 +202,7 @@ void recordAudio(CircularBuffer &buffer)
     HWAVEIN hWaveIn;
     WAVEFORMATEX waveFormat;
     waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = 1; // ????
+    waveFormat.nChannels = 1; // моно
     waveFormat.nSamplesPerSec = SAMPLE_RATE;
     waveFormat.wBitsPerSample = 16;
     waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
@@ -211,7 +211,7 @@ void recordAudio(CircularBuffer &buffer)
 
     if (waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
     {
-        std::cerr << "?????? ???????? ?????????? ??????." << std::endl;
+        std::cerr << "Не удалось открыть запись звука." << std::endl;
         return;
     }
 
@@ -223,7 +223,7 @@ void recordAudio(CircularBuffer &buffer)
 
     if (waveInPrepareHeader(hWaveIn, &waveHeader, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
     {
-        std::cerr << "?????? ?????????? ????????? ??????." << std::endl;
+        std::cerr << "Не удалось подготовить заголовок для записи." << std::endl;
         waveInClose(hWaveIn);
         return;
     }
@@ -253,7 +253,7 @@ void sendToCOMPort(HANDLE hCom, CircularBuffer &circBuffer)
             DWORD bytesWritten = 0;
             if (!WriteFile(hCom, buffer.data(), buffer.size() * sizeof(short), &bytesWritten, NULL))
             {
-                std::cerr << "?????? ?????? ? COM-????: " << GetLastError() << std::endl;
+                std::cerr << "Ошибка записи в COM-порт: " << GetLastError() << std::endl;
             }
         }
     }
@@ -263,7 +263,7 @@ int main()
 {
     findComPorts();
     std::string Port;
-    std::cout << "??????? ??? COM ????? (????????, COM1): ";
+    std::cout << "Выберите COM порт (например, COM1): ";
     std::cin >> Port;
 
     HANDLE hComWrite = openCOMPort(Port);
