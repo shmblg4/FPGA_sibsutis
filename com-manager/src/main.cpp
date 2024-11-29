@@ -1,13 +1,11 @@
 #include <iostream>
-#include <windows.h>
-#include <mmsystem.h>
 #include <vector>
 #include <thread>
-#include <chrono>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <xserial.hpp>
 
 #define SAMPLE_RATE 24000
 #define BUFFER_SIZE 8192
@@ -41,7 +39,7 @@ public:
         if (count < capacity)
             ++count;
         else
-            readIndex = (readIndex + 1) % capacity; // перепись старых данных
+            readIndex = (readIndex + 1) % capacity; // overwriting old data
         cv.notify_one();
     }
 
@@ -60,76 +58,17 @@ public:
     }
 };
 
-void findComPorts()
+// Using xserial to work with COM ports
+xserial::ComPort openCOMPort(int portNumber, unsigned long baudRate)
 {
-    char portName[10];
-    for (int i = 256; i >= 1; --i)
+    xserial::ComPort comPort;
+    if (!comPort.open(portNumber, baudRate))
     {
-        snprintf(portName, sizeof(portName), "COM%d", i);
-
-        HANDLE hCom = CreateFileA(portName, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-
-        if (hCom != INVALID_HANDLE_VALUE)
-        {
-            std::cout << portName << " доступен." << std::endl;
-            CloseHandle(hCom);
-        }
+        std::cerr << "Failed to open COM port COM" << portNumber << std::endl;
+        return comPort;
     }
-}
-
-HANDLE openCOMPort(const std::string &portName)
-{
-    HANDLE hCom = CreateFileA(
-        portName.c_str(),
-        GENERIC_READ | GENERIC_WRITE,
-        0,
-        nullptr,
-        OPEN_EXISTING,
-        0,
-        nullptr);
-
-    if (hCom == INVALID_HANDLE_VALUE)
-    {
-        std::cerr << "Не удалось открыть COM-порт: " << GetLastError() << std::endl;
-        return NULL;
-    }
-
-    DCB dcb = {0};
-    dcb.DCBlength = sizeof(dcb);
-    if (!GetCommState(hCom, &dcb))
-    {
-        std::cerr << "Не удалось получить параметры COM-порта" << std::endl;
-        CloseHandle(hCom);
-        return NULL;
-    }
-
-    dcb.BaudRate = 921600;
-    dcb.ByteSize = 8;
-    dcb.StopBits = ONESTOPBIT;
-    dcb.Parity = NOPARITY;
-
-    if (!SetCommState(hCom, &dcb))
-    {
-        std::cerr << "Не удалось установить параметры COM-порта" << std::endl;
-        CloseHandle(hCom);
-        return NULL;
-    }
-
-    COMMTIMEOUTS timeouts = {0};
-    timeouts.ReadIntervalTimeout = 50;
-    timeouts.ReadTotalTimeoutMultiplier = 10;
-    timeouts.ReadTotalTimeoutConstant = 50;
-    timeouts.WriteTotalTimeoutMultiplier = 10;
-    timeouts.WriteTotalTimeoutConstant = 50;
-
-    if (!SetCommTimeouts(hCom, &timeouts))
-    {
-        std::cerr << "Не удалось установить таймауты для COM-порта" << std::endl;
-        CloseHandle(hCom);
-        return NULL;
-    }
-
-    return hCom;
+    std::cout << "Opened COM port COM" << portNumber << std::endl;
+    return comPort;
 }
 
 void playbackAudio(CircularBuffer &buffer)
@@ -137,7 +76,7 @@ void playbackAudio(CircularBuffer &buffer)
     HWAVEOUT hWaveOut;
     WAVEFORMATEX waveFormat;
     waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = 1; // моно
+    waveFormat.nChannels = 1; // mono
     waveFormat.nSamplesPerSec = SAMPLE_RATE;
     waveFormat.wBitsPerSample = 16;
     waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
@@ -146,7 +85,7 @@ void playbackAudio(CircularBuffer &buffer)
 
     if (waveOutOpen(&hWaveOut, WAVE_MAPPER, &waveFormat, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
     {
-        std::cerr << "Не удалось открыть вывод звука." << std::endl;
+        std::cerr << "Failed to open audio output." << std::endl;
         return;
     }
 
@@ -163,7 +102,7 @@ void playbackAudio(CircularBuffer &buffer)
 
             if (waveOutPrepareHeader(hWaveOut, &waveHeader, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
             {
-                std::cerr << "Не удалось подготовить заголовок для вывода." << std::endl;
+                std::cerr << "Failed to prepare header for output." << std::endl;
                 waveOutClose(hWaveOut);
                 return;
             }
@@ -175,24 +114,17 @@ void playbackAudio(CircularBuffer &buffer)
     waveOutClose(hWaveOut);
 }
 
-void receiveFromCOMPort(HANDLE hCom, CircularBuffer &circBuffer)
+void receiveFromCOMPort(xserial::ComPort &comPort, CircularBuffer &circBuffer)
 {
     std::vector<short> buffer(BUFFER_SIZE);
 
     while (!stopFlag)
     {
-        DWORD bytesRead = 0;
-        if (ReadFile(hCom, buffer.data(), buffer.size() * sizeof(short), &bytesRead, NULL))
+        unsigned long bytesRead = comPort.read(reinterpret_cast<char *>(buffer.data()), buffer.size() * sizeof(short));
+        if (bytesRead > 0)
         {
-            if (bytesRead > 0)
-            {
-                buffer.resize(bytesRead / sizeof(short));
-                circBuffer.push(buffer);
-            }
-        }
-        else
-        {
-            std::cerr << "Ошибка чтения из COM-порта: " << GetLastError() << std::endl;
+            buffer.resize(bytesRead / sizeof(short));
+            circBuffer.push(buffer);
         }
     }
 }
@@ -202,7 +134,7 @@ void recordAudio(CircularBuffer &buffer)
     HWAVEIN hWaveIn;
     WAVEFORMATEX waveFormat;
     waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = 1; // моно
+    waveFormat.nChannels = 1; // mono
     waveFormat.nSamplesPerSec = SAMPLE_RATE;
     waveFormat.wBitsPerSample = 16;
     waveFormat.nBlockAlign = waveFormat.nChannels * waveFormat.wBitsPerSample / 8;
@@ -211,7 +143,7 @@ void recordAudio(CircularBuffer &buffer)
 
     if (waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
     {
-        std::cerr << "Не удалось открыть запись звука." << std::endl;
+        std::cerr << "Failed to open audio recording." << std::endl;
         return;
     }
 
@@ -223,7 +155,7 @@ void recordAudio(CircularBuffer &buffer)
 
     if (waveInPrepareHeader(hWaveIn, &waveHeader, sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
     {
-        std::cerr << "Не удалось подготовить заголовок для записи." << std::endl;
+        std::cerr << "Failed to prepare header for recording." << std::endl;
         waveInClose(hWaveIn);
         return;
     }
@@ -242,7 +174,7 @@ void recordAudio(CircularBuffer &buffer)
     waveInClose(hWaveIn);
 }
 
-void sendToCOMPort(HANDLE hCom, CircularBuffer &circBuffer)
+void sendToCOMPort(xserial::ComPort &comPort, CircularBuffer &circBuffer)
 {
     std::vector<short> buffer;
 
@@ -250,30 +182,29 @@ void sendToCOMPort(HANDLE hCom, CircularBuffer &circBuffer)
     {
         if (circBuffer.pop(buffer))
         {
-            DWORD bytesWritten = 0;
-            if (!WriteFile(hCom, buffer.data(), buffer.size() * sizeof(short), &bytesWritten, NULL))
-            {
-                std::cerr << "Ошибка записи в COM-порт: " << GetLastError() << std::endl;
-            }
+            comPort.write(reinterpret_cast<char *>(buffer.data()), buffer.size() * sizeof(short));
         }
     }
 }
 
 int main()
 {
-    findComPorts();
-    std::string Port;
-    std::cout << "Выберите COM порт (например, COM1): ";
+    int Port;
+    unsigned long baudRate = 921600; // Setting the required speed
+    std::cout << "Select COM port (e.g., 1 for COM1): ";
     std::cin >> Port;
 
-    HANDLE hComWrite = openCOMPort(Port);
-    if (!hComWrite)
-        return 1;
-
-    HANDLE hComRead = openCOMPort(Port);
-    if (!hComRead)
+    // Open the COM port via xserial
+    xserial::ComPort comWrite = openCOMPort(Port, baudRate);
+    if (!comWrite.getStateComPort())
     {
-        CloseHandle(hComWrite);
+        return 1;
+    }
+
+    xserial::ComPort comRead = openCOMPort(Port, baudRate);
+    if (!comRead.getStateComPort())
+    {
+        comWrite.close();
         return 1;
     }
 
@@ -281,8 +212,8 @@ int main()
     CircularBuffer playbackBuffer(DELAY_SECONDS * SAMPLE_RATE / BUFFER_SIZE);
 
     std::thread recordThread(recordAudio, std::ref(recordBuffer));
-    std::thread sendThread(sendToCOMPort, hComWrite, std::ref(recordBuffer));
-    std::thread receiveThread(receiveFromCOMPort, hComRead, std::ref(playbackBuffer));
+    std::thread sendThread(sendToCOMPort, std::ref(comWrite), std::ref(recordBuffer));
+    std::thread receiveThread(receiveFromCOMPort, std::ref(comRead), std::ref(playbackBuffer));
     std::thread playbackThread(playbackAudio, std::ref(playbackBuffer));
 
     std::cin.get();
@@ -295,8 +226,8 @@ int main()
     receiveThread.join();
     playbackThread.join();
 
-    CloseHandle(hComWrite);
-    CloseHandle(hComRead);
+    comWrite.close();
+    comRead.close();
 
     return 0;
 }
