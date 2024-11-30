@@ -62,10 +62,10 @@ public:
 xserial::ComPort openCOMPort(int portNumber, unsigned long baudRate)
 {
     xserial::ComPort comPort;
-    if (!comPort.open(portNumber, baudRate))
+    while (!comPort.open(portNumber, baudRate))
     {
-        std::cerr << "Failed to open COM port COM" << portNumber << std::endl;
-        return comPort;
+        Sleep(1000);
+        std::cout << "Trying to open COM" << portNumber << std::endl;
     }
     std::cout << "Opened COM port COM" << portNumber << std::endl;
     return comPort;
@@ -191,9 +191,13 @@ int main()
 {
     int Port;
     unsigned long baudRate = 921600; // Setting the required speed
+    std::vector<std::string> ports;
+    xserial::ComPort ListComs;
+    ListComs.getListSerialPorts(std::ref(ports));
+    for (auto elem : ports)
+        std::cout << elem << std::endl;
     std::cout << "Select COM port (e.g., 1 for COM1): ";
     std::cin >> Port;
-
     // Open the COM port via xserial
     xserial::ComPort comWrite = openCOMPort(Port, baudRate);
     if (!comWrite.getStateComPort())
