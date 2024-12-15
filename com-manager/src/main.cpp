@@ -190,10 +190,15 @@ void sendToCOMPort(xserial::ComPort &comPort, CircularBuffer &circBuffer)
     }
 }
 
-int main()
+int main(int argc, char *argv[])
 {
     int port;
-    unsigned long baudRate = 921600;
+    if (argc <= 1)
+    {
+        std::cout << "Usage: .\\com-manager <baudrate>" << std::endl;
+        return 1;
+    }
+    unsigned long baudRate = std::stoul(argv[1]);
     xserial::ComPort ListOfPorts;
     std::vector<std::string> ComPorts;
     ListOfPorts.getListSerialPorts(std::ref(ComPorts));
